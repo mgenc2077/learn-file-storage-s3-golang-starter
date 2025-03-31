@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -59,10 +60,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "Auth user is not the owner of the video", err)
 		return
 	}
-	vidthumb := thumbnail{data: imgdata, mediaType: header.Header.Get("Content-Type")}
-	videoThumbnails[videoID] = vidthumb
-	thumbnailURL := fmt.Sprintf("http://localhost:%v/api/thumbnails/%v", cfg.port, videoID)
-	dbvideo.ThumbnailURL = &thumbnailURL
+	//vidthumb := thumbnail{data: imgdata, mediaType: header.Header.Get("Content-Type")}
+	imgencoded := base64.StdEncoding.EncodeToString(imgdata)
+	dataurl := fmt.Sprintf("data:%s;base64,%s", header.Header.Get("Content-Type"), imgencoded)
+	dbvideo.ThumbnailURL = &dataurl
 	err = cfg.db.UpdateVideo(dbvideo)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Couldn't update video", err)
