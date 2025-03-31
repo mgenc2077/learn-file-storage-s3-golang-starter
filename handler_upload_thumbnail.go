@@ -1,11 +1,13 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -46,11 +48,11 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer file.Close()
-	imgdata, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Couldn't read file", err)
-		return
-	}
+	//imgdata, err := io.ReadAll(file)
+	//if err != nil {
+	//	respondWithError(w, http.StatusBadRequest, "Couldn't read file", err)
+	//	return
+	//}
 	dbvideo, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Couldn't get video", err)
@@ -61,9 +63,35 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	//vidthumb := thumbnail{data: imgdata, mediaType: header.Header.Get("Content-Type")}
-	imgencoded := base64.StdEncoding.EncodeToString(imgdata)
-	dataurl := fmt.Sprintf("data:%s;base64,%s", header.Header.Get("Content-Type"), imgencoded)
-	dbvideo.ThumbnailURL = &dataurl
+
+	//imgencoded := base64.StdEncoding.EncodeToString(imgdata)
+	//dataurl := fmt.Sprintf("data:%s;base64,%s", header.Header.Get("Content-Type"), imgdata)
+	filehead, _, _ := mime.ParseMediaType(header.Header.Get("Content-Type"))
+	if filehead != "image/jpeg" && filehead != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid file type", err)
+		return
+	}
+	var filext string
+	switch filehead {
+	case "image/jpeg":
+		filext = ".jpg"
+	case "image/png":
+		filext = ".png"
+	}
+	videoSaveName := fmt.Sprintf("%s%s", videoIDString, filext)
+	thumbfile := filepath.Join(cfg.assetsRoot, videoSaveName)
+	asd, err := os.Create(thumbfile)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Couldn't create file", err)
+		return
+	}
+	_, err = io.Copy(asd, file)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Couldn't copy file", err)
+		return
+	}
+	thumblink := fmt.Sprintf("http://localhost:%v/assets/%v", cfg.port, videoSaveName)
+	dbvideo.ThumbnailURL = &thumblink
 	err = cfg.db.UpdateVideo(dbvideo)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Couldn't update video", err)
