@@ -82,10 +82,20 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	randbytes := make([]byte, 32)
 	rand.Read(randbytes)
 	randName := aspectRatio + "/" + base64.RawURLEncoding.EncodeToString(randbytes) + ".mp4"
+	outvideopath, err := processVideoForFastStart(tempfile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't process video", err)
+		return
+	}
+	outvideo, err := os.Open(outvideopath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open processed video", err)
+		return
+	}
 	_, err = cfg.s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &randName,
-		Body:        tempfile,
+		Body:        outvideo,
 		ContentType: &filehead,
 	})
 	if err != nil {
@@ -131,4 +141,14 @@ func getVideoAspectRatio(filepath string) (string, error) {
 	default:
 		return "other", nil
 	}
+}
+
+func processVideoForFastStart(filepath string) (string, error) {
+	outfile := filepath + ".processing"
+	cmd := exec.Command("ffmpeg", "-i", filepath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outfile)
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+	return outfile, nil
 }
